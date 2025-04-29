@@ -1,0 +1,55 @@
+services:
+  search-flight:
+    build: ./services/search-flight
+    container_name: search_flight
+    ports:
+      - "4000:4000"
+    
+  scraper-flight1:
+    build: ./services/scraper-flight1
+    ports:
+      - "4002:4002"
+
+  scraper-flight2:
+    build: ./services/scraper-flight2
+    ports:
+      - "4003:4003"
+
+  flight-cache:
+    build: ./services/flight-cache
+    ports:
+      - "4004:4004"
+
+
+  api-gateway:
+    build: ./services/api-gateway
+    container_name: api_gateway
+    ports:
+      - "3001:3001"
+    environment:
+      - CACHE_URL=http://flight-cache:4004
+      - SEARCH_URL=http://search-flight:4000
+      - SCRAPER1_URL=http://scraper-flight1:4002
+      - SCRAPER2_URL=http://scraper-flight2:4003
+    depends_on:
+      - search-flight
+      - scraper-flight1
+      - scraper-flight2
+      - flight-cache
+    networks:
+      - backend
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+
+networks:
+  backend:
+    driver: bridge
+  frontend:
+    driver: bridge
+
