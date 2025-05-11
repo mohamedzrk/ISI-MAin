@@ -1,52 +1,58 @@
+import requests
 from flask import Flask, request, jsonify
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Modelo de vuelo
-class Flight:
-    def __init__(self, provider, origin, destination, travel_date, price):
-        self.provider = provider
-        self.origin = origin
-        self.destination = destination
-        self.travel_date = travel_date
-        self.price = price
+SCRAPER_URLS = [
+    "http://scraper-flight1:4002/flights",
+    "http://scraper-flight2:4003/flights"
+]
 
-    def to_dict(self):
-        return {
-            "provider": self.provider,
-            "origin": self.origin,
-            "destination": self.destination,
-            "travel_date": self.travel_date.strftime("%Y-%m-%d"),  # Convertimos a string en formato YYYY-MM-DD
-            "price": self.price
-        }
+FLIGHT_CACHE_URL = "http://flight-cache:4004/cache"
 
-# Ruta para buscar vuelos
-@app.route("/flights", methods=["GET"])
+@app.route('/flights', methods=['GET'])
 def search_flights():
-    # Obtenemos los parámetros de consulta
-    origin = request.args.get("origin")
-    destination = request.args.get("destination")
-    travel_date = request.args.get("travel_date")
+    origin = request.args.get('origin')
+    destination = request.args.get('destination')
+    travel_date = request.args.get('travel_date')
 
-    # Validamos que todos los parámetros existan
-    if not origin or not destination or not travel_date:
-        return jsonify({"error": "Missing required parameters"}), 400
+    if not all([origin, destination, travel_date]):
+        return jsonify({'error': 'Missing parameters'}), 400
 
     try:
-        # Validamos la fecha
-        travel_date = datetime.strptime(travel_date, "%Y-%m-%d").date()
+        datetime.strptime(travel_date, '%Y-%m-%d')
     except ValueError:
-        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+        return jsonify({'error': 'Invalid date format'}), 400
 
-    # Lista de vuelos de ejemplo
-    flights = [
-        Flight(provider="ProviderA", origin=origin, destination=destination, travel_date=travel_date, price=120),
-        Flight(provider="ProviderB", origin=origin, destination=destination, travel_date=travel_date, price=150)
-    ]
+    results = []
+    for url in SCRAPER_URLS:
+        try:
+            response = requests.get(url, params={
+                "origin": origin,
+                "destination": destination,
+                "travel_date": travel_date
+            })
+            response.raise_for_status()
+            flights = response.json()
 
-    # Retornamos la lista de vuelos
-    return jsonify([flight.to_dict() for flight in flights])
+            # Convertimos "provider" a "airline" si es necesario
+            for f in flights:
+                f["airline"] = f.pop("provider", "Unknown")
+            results.extend(flights)
+
+        except Exception as e:
+            print(f"⚠️ Error fetching from {url}: {e}")
+
+    # Guardar en la caché
+    try:
+        post_response = requests.post(FLIGHT_CACHE_URL, json=results)
+        post_response.raise_for_status()
+        print("✅ Guardado en caché.")
+    except Exception as e:
+        print(f"❌ Error al guardar en caché: {e}")
+
+    return jsonify(results)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3000)
+    app.run(host='0.0.0.0', port=4000)

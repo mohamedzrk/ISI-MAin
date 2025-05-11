@@ -1,48 +1,37 @@
-from flask import Flask, request, render_template_string
+# Importa Flask y requests (cliente HTTP).
+from flask import Flask, request, render_template
 import requests
 
+# Crea una instancia de la aplicación Flask.
 app = Flask(__name__)
+GATEWAY_URL = "http://api-gateway:3001" # URL del API Gateway
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Comparador de Vuelos</title>
-</head>
-<body style="padding: 20px;">
-    <h1>Comparador de Vuelos</h1>
-    <form method="get">
-        <input name="ori" placeholder="Origen" value="{{ ori or '' }}" />
-        <input name="dst" placeholder="Destino" value="{{ dst or '' }}" />
-        <input type="date" name="date" value="{{ date or '' }}" />
-        <button type="submit">Buscar</button>
-    </form>
-    <ul>
-    {% for flight in flights %}
-        <li>{{ flight['proveedor'] }} {{ flight['ori'] }}→{{ flight['dst'] }} {{ flight['date'] }} {{ flight['price'] }}€</li>
-    {% endfor %}
-    </ul>
-</body>
-</html>
-"""
-
-@app.route('/', methods=['GET'])
-def index():
-    ori = request.args.get('ori')
-    dst = request.args.get('dst')
-    date = request.args.get('date')
+# Configura la ruta para la página principal.
+@app.route('/', methods=['GET']) 
+def index():   #1) Leer parámetros de la URL (origin, destination, travel_date)
+    origin = request.args.get('origin')  
+    destination = request.args.get('destination')
+    travel_date = request.args.get('travel_date')
     flights = []
-
-    if ori and dst and date:
+    # Si se proporcionan los parámetros de origen, destino y fecha de viaje, realiza la búsqueda de vuelos.
+    # 2) Si los tres existen, preguntar al gateway
+    if origin and destination and travel_date: # si los valores existen
+        params = {
+            'origin': origin,
+            'destination': destination,
+            'travel_date': travel_date
+        } # Parámetros para la búsqueda de vuelos
         try:
-            response = requests.get('http://api-gateway:3001/flights', params={'ori': ori, 'dst': dst, 'date': date})
-            if response.status_code == 200:
-                flights = response.json()
-        except Exception as e:
-            print(f"Error fetching flights: {e}")
+            resp = requests.get(f"{GATEWAY_URL}/flights", params=params) # Lanza una petición GET al gateway.
+            resp.raise_for_status() # Lanza una excepción si la respuesta no es exitosa.
+            flights = resp.json() # Convierte la respuesta JSON en un objeto Python.
+        except requests.RequestException as e: # Maneja errores de conexión o respuesta no exitosa.
+            app.logger.error(f"Error fetching flights: {e}")
+            
 
-    return render_template_string(HTML_TEMPLATE, ori=ori, dst=dst, date=date, flights=flights)
+    return render_template('index.html', flights=flights,
+                           origin=origin, destination=destination, travel_date=travel_date)
+    #Renderiza la plantilla index.html, pasando: flights: la lista de resultados. os valores de búsqueda, para que el formulario los muestre tras el envío.
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3000)
+    app.run(host='0.0.0.0', port=3000) #Arranca la aplicación Flask en el puerto 3000, accesible desde cualquier dirección IP.

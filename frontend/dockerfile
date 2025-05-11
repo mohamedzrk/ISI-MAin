@@ -1,16 +1,14 @@
-# Usa una imagen de Python como base
-FROM python:3.11-slim
-
-# Configura el directorio de trabajo
+FROM python:3.11-slim 
+# image: python:3.11-slim
 WORKDIR /app
-
-# Copia los archivos de tu frontend
+# cambiar el directorio de trabajo a /app
 COPY requirements.txt ./
-RUN pip install -r requirements.txt
-
-# Copia el código de tu frontend
+# copiar el archivo requirements.txt al contenedor
+RUN pip install --no-cache-dir -r requirements.txt
+# instalar las dependencias de Python
 COPY . .
-
-# Ejecuta el servidor Flask
+# copiar el resto de los archivos de la aplicación al contenedor
+EXPOSE 3000
+# exponer el puerto 3000
 CMD ["python", "app.py"]
-
+# ejecutar el script app.py
