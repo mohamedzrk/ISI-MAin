@@ -8,13 +8,16 @@ services:
     networks:
       - backend
 
+
   scraper-flight1:
     build: ./services/scraper-flight1
-    container_name: scraper_flight1
-    ports:
-      - "4002:4002"
-    networks:
-      - backend
+    environment:
+      - RAPIDAPI_KEY=a9e9833266msh6e1ebe861609386p12da89jsnb0b6f6f4636b
+
+
+
+    
+
 
   scraper-flight2:
     build: ./services/scraper-flight2

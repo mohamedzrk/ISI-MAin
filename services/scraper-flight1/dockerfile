@@ -1,24 +1,26 @@
 FROM python:3.11-slim
 
-# Instalar dependencias del SO para Playwright
+# 1) Dependencias del sistema para Playwright
 RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    ca-certificates \
-    libgtk-3-0 \
-    libdbus-glib-1-2 \
-    libx11-xcb1 \
-    libnss3 \
-    libasound2 \
+    wget gnupg ca-certificates libgtk-3-0 libdbus-glib-1-2 libx11-xcb1 \
+    libnss3 libasound2 \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Descargar navegadores para Playwright
+# 2) Copiar e instalar dependencias Python
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir playwright
+
+# 3) Descargar los navegadores para Playwright
 RUN playwright install --with-deps chromium
 
+# 4) Copiar el resto del código
 COPY . .
+
+# 5) Exponer el puerto del servicio
 EXPOSE 4002
+
+# 6) Comando por defecto
 CMD ["python", "app.py"]
