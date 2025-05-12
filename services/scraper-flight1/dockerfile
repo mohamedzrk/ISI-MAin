@@ -1,17 +1,7 @@
-# Usa la imagen oficial de Playwright + Python (latest)
-FROM mcr.microsoft.com/playwright/python:latest
-
+FROM python:3.11-slim
 WORKDIR /app
-
-# Copia e instala dependencias Python
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Instala navegadores que Playwright necesita
-RUN playwright install --with-deps
-
-# Copia el código de tu scraper
-COPY . .
-
+COPY app.py ./
 EXPOSE 4002
 CMD ["python", "app.py"]
