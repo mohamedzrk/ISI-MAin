@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import requests
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 import logging
 
 app = Flask(__name__)
@@ -9,39 +9,51 @@ logging.basicConfig(level=logging.INFO)
 def get_flights():
     origin = request.args.get("origin")
     destination = request.args.get("destination")
-    travel_date = request.args.get("travel_date")
+    travel_date = request.args.get("travel_date")  # formato YYYY-MM-DD
 
-    if not origin or not destination or not travel_date:
+    if not all([origin, destination, travel_date]):
         return jsonify({"error": "Missing parameters"}), 400
 
-    url = "https://api.skypicker.com/flights"
-    params = {
-        "fly_from": origin,
-        "fly_to": destination,
-        "date_from": travel_date.replace("-", "/"),
-        "date_to": travel_date.replace("-", "/"),
-        "partner": "picky",
-        "limit": 10,
-        "curr": "EUR"
-    }
+    results = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        try:
+            # Ir a la página de búsqueda de Kiwi
+            page.goto("https://www.kiwi.com/es/")
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.kiwi.com/",
-        "Origin": "https://www.kiwi.com"
-    }
+            # Rellenar formulario
+            page.fill('input[placeholder="¿Desde dónde?"]', origin)
+            page.fill('input[placeholder="¿Hacia dónde?"]', destination)
+            page.click('input[type="date"]')
+            page.fill('input[type="date"]', travel_date)
+            page.click('button:has-text("Buscar")')
 
-    try:
-        logging.info(f"Requesting Skypicker: {url} params={params}")
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        return jsonify(data.get("data", []))
-    except requests.RequestException as e:
-        logging.error(f"Error calling Skypicker API: {e}")
-        return jsonify({"error": "External API request failed"}), 502
+            # Esperar a que carguen los resultados
+            page.wait_for_selector('.ResultItem', timeout=20000)
+
+            # Extraer algunos vuelos (limitar a 5)
+            items = page.query_selector_all('.ResultItem')[:5]
+            for item in items:
+                price = item.query_selector('.Price_amount').inner_text().strip()
+                depart = item.query_selector('.Segment-route .Segment-time').inner_text().split('–')[0].strip()
+                arrive = item.query_selector('.Segment-route .Segment-time').inner_text().split('–')[1].strip()
+                results.append({
+                    "provider": "Playwright-Kiwi",
+                    "origin": origin,
+                    "destination": destination,
+                    "travel_date": travel_date,
+                    "price": float(price.replace('€','').replace(',','.')),
+                    "depart_time": depart,
+                    "arrival_time": arrive
+                })
+
+        except PlaywrightTimeout:
+            logging.error("Timeout al cargar resultados")
+        finally:
+            browser.close()
+
+    return jsonify(results)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=4002)
