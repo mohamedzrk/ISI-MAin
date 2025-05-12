@@ -1,57 +1,66 @@
 from flask import Flask, request, jsonify
-import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 import logging
+import traceback
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# URL de ejemplo para scrappear (Kayak)
-# Construye la ruta en función de origen, destino y fecha: 
-# https://www.kayak.com/flights/MAD-BCN/2025-05-20?sort=bestflight_a
 BASE_URL = "https://www.kayak.com/flights"
+HEADERS = {
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/113.0.0.0 Safari/537.36'
+    )
+}
+
+def get_rendered_html(url: str) -> str:
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(user_agent=HEADERS['User-Agent'])
+        page.goto(url, wait_until='networkidle')
+        html = page.content()
+        browser.close()
+        return html
 
 @app.route('/flights', methods=['GET'])
 def get_flights():
-    origin = request.args.get('origin')
+    origin      = request.args.get('origin')
     destination = request.args.get('destination')
     travel_date = request.args.get('travel_date')
 
     if not all([origin, destination, travel_date]):
         return jsonify({'error': 'Missing parameters'}), 400
 
-    # Construir URL de Kayak
-    flight_path = f"/{origin}-{destination}/{travel_date}"
-    target_url = BASE_URL + flight_path + "?sort=bestflight_a"
+    target_url = f"{BASE_URL}/{origin}-{destination}/{travel_date}?sort=bestflight_a"
+    logging.info(f"Fetching (Playwright) {target_url}")
 
     try:
-        # Petición al sitio web (nota: Kayak carga contenido dinámicamente)
-        resp = requests.get(target_url, timeout=10)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        logging.error(f"Error fetching target page: {e}")
-        return jsonify({'error': 'Failed to retrieve data'}), 502
+        html = get_rendered_html(target_url)
+        # Imprime un fragmento para depurar
+        print("=== RENDERED HTML START ===")
+        print(html[:1000])
+        print("=== RENDERED HTML END ===")
+    except Exception:
+        logging.error("Error rendering page:\n" + traceback.format_exc())
+        return jsonify({'error': 'Render failed'}), 502
 
-    # Parsear el HTML (aunque normalmente Kayak usa JS)
-    soup = BeautifulSoup(resp.text, 'lxml')
+    soup = BeautifulSoup(html, 'lxml')
     flights = []
 
-    # Ejemplo de selectores (ajusta según estructura real)
     for item in soup.select('.Base-Results-HorizonResult'):
         try:
-            airline = item.select_one('.codeshares-airline-names').get_text(strip=True)
-            price_text = item.select_one('.price-text').get_text(strip=True)
-            price = float(price_text.replace('€', '').replace(',', '').replace('$', ''))
-            origin_code = origin
-            destination_code = destination
-            depart_date = travel_date
-
+            airline   = item.select_one('.codeshares-airline-names').get_text(strip=True)
+            price_txt = item.select_one('.price-text').get_text(strip=True)
+            price     = float(price_txt.replace('€', '').replace(',', '').replace('$', ''))
             flights.append({
-                'provider': airline,
-                'origin': origin_code,
-                'destination': destination_code,
-                'travel_date': depart_date,
-                'price': price
+                'airline':     airline,
+                'origin':      origin,
+                'destination': destination,
+                'travel_date': travel_date,
+                'price':       price
             })
         except Exception as e:
             logging.warning(f"Skipping item due to parse error: {e}")

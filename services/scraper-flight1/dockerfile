@@ -1,20 +1,16 @@
-FROM python:3.11-slim
-
-# 1) Instalamos dependencias de sistema para lxml
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-      build-essential \
-      libxml2-dev \
-      libxslt1-dev \
-      && rm -rf /var/lib/apt/lists/*
+# Usa la imagen oficial de Playwright + Python (latest)
+FROM mcr.microsoft.com/playwright/python:latest
 
 WORKDIR /app
 
-# 2) Copiamos y pip install
+# Copia e instala dependencias Python
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3) Copiamos el resto del scraper
+# Instala navegadores que Playwright necesita
+RUN playwright install --with-deps
+
+# Copia el código de tu scraper
 COPY . .
 
 EXPOSE 4002

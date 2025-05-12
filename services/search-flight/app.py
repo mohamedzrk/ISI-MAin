@@ -10,6 +10,13 @@ SCRAPER_URLS = [
 ]
 
 FLIGHT_CACHE_URL = "http://flight-cache:4004/cache"
+HEADERS = {
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/113.0.0.0 Safari/537.36'
+    )
+}
 
 @app.route('/flights', methods=['GET'])
 def search_flights():
@@ -28,29 +35,30 @@ def search_flights():
     results = []
     for url in SCRAPER_URLS:
         try:
-            response = requests.get(url, params={
-                "origin": origin,
-                "destination": destination,
-                "travel_date": travel_date
-            })
-            response.raise_for_status()
-            flights = response.json()
-
-            # Convertimos "provider" a "airline" si es necesario
+            resp = requests.get(
+                url,
+                params={"origin": origin, "destination": destination, "travel_date": travel_date},
+                headers=HEADERS,
+                timeout=10
+            )
+            resp.raise_for_status()
+            flights = resp.json()
             for f in flights:
-                f["airline"] = f.pop("provider", "Unknown")
+                f["airline"] = f.pop("provider", f.get("airline", "Unknown"))
             results.extend(flights)
-
         except Exception as e:
-            print(f"⚠️ Error fetching from {url}: {e}")
+            app.logger.warning(f"⚠️ Error fetching from {url}: {e}")
 
-    # Guardar en la caché
     try:
-        post_response = requests.post(FLIGHT_CACHE_URL, json=results)
-        post_response.raise_for_status()
-        print("✅ Guardado en caché.")
+        requests.post(
+            FLIGHT_CACHE_URL,
+            json=results,
+            headers=HEADERS,
+            timeout=5
+        ).raise_for_status()
+        app.logger.info("✅ Guardado en caché.")
     except Exception as e:
-        print(f"❌ Error al guardar en caché: {e}")
+        app.logger.warning(f"❌ Error al guardar en caché: {e}")
 
     return jsonify(results)
 

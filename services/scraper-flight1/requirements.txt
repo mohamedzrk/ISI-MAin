@@ -1,4 +1,5 @@
- flask
+flask
 beautifulsoup4
 lxml
 requests
+playwright

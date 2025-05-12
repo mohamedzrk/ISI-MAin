@@ -1,13 +1,12 @@
-version: "3.9" #version del docker-compose
-
 services:
   search-flight:
-    build: ./services/search-flight #carpeta donde se encuentra el Dockerfile
-    container_name: search_flight #nombre del contenedor
+    build:
+      context: ./services/search-flight
+    container_name: search_flight
     ports:
-      - "4000:4000" #puerto del contenedor
+      - "4000:4000"
     networks:
-      - backend #red a la que pertenece el contenedor
+      - backend
 
   scraper-flight1:
     build: ./services/scraper-flight1
@@ -25,7 +24,6 @@ services:
     networks:
       - backend
 
-
   postgres:
     image: postgres:17
     environment:
@@ -38,7 +36,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - backend
-
 
   flight-cache:
     build: ./services/flight-cache
@@ -56,27 +53,26 @@ services:
     networks:
       - backend
 
-
   api-gateway:
     build: ./services/api-gateway
     container_name: api_gateway
     ports:
       - "3001:3001"
-    environment: # Variables de entorno para la configuración del API Gateway
-      - CACHE_URL=http://flight-cache:4004 # URL del servicio de caché
-      - SEARCH_URL=http://search-flight:4000 # URL del servicio de búsqueda
-      - SCRAPER1_URL=http://scraper-flight1:4002 # URL del primer scraper
-      - SCRAPER2_URL=http://scraper-flight2:4003 # URL del segundo scraper
-    depends_on: # Dependencias del API Gateway
-      - search-flight 
+    environment:
+      - CACHE_URL=http://flight-cache:4004
+      - SEARCH_URL=http://search-flight:4000
+      - SCRAPER1_URL=http://scraper-flight1:4002
+      - SCRAPER2_URL=http://scraper-flight2:4003
+    depends_on:
+      - search-flight
       - scraper-flight1
       - scraper-flight2
       - flight-cache
     networks:
       - backend
 
-  frontend: # El frontend está también en la red backend para poder llamar a http://api-gateway:3001.
-    build: ./frontend 
+  frontend:
+    build: ./frontend
     container_name: frontend
     ports:
       - "3000:3000"
@@ -84,10 +80,10 @@ services:
       - api-gateway
     networks:
       - backend
-  
+
 volumes:
-  postgres_data:  
+  postgres_data:
 
 networks:
   backend:
-    driver: bridge # Define la red backend como una red puente para que todos los servicios puedan verse por nombre.
+    driver: bridge
