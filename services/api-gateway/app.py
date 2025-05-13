@@ -28,14 +28,14 @@ HEADERS = {
 
 @app.route('/flights', methods=['GET'])
 def get_flights():
-    origin = request.args.get('origin')
+    origin      = request.args.get('origin')
     destination = request.args.get('destination')
     travel_date = request.args.get('travel_date')
 
     if not all([origin, destination, travel_date]):
         return jsonify({'error': 'Missing parameters'}), 400
 
-    # 2) Intentar caché
+    # 1) Intentar caché
     cache_resp = requests.get(
         f"{CACHE_URL}/cache",
         params={'origin': origin, 'destination': destination, 'travel_date': travel_date},
@@ -48,16 +48,17 @@ def get_flights():
 
     app.logger.info('Cache MISS')
 
-    # 3) Llamadas concurrentes
+    # 2) Llamadas concurrentes a search, scraper1 y scraper2
     flights = []
     with ThreadPoolExecutor() as executor:
         futures = [
             executor.submit(
-                requests.get,
-                url,
-                {'origin': origin, 'destination': destination, 'travel_date': travel_date},
-                HEADERS,
-                10
+                lambda url: requests.get(
+                    url,
+                    params={'origin': origin, 'destination': destination, 'travel_date': travel_date},
+                    headers=HEADERS,
+                    timeout=10
+                ), url
             )
             for url in SERVICE_ENDPOINTS
         ]
@@ -69,7 +70,7 @@ def get_flights():
             except Exception as e:
                 app.logger.error(f"Error contacting service: {e}")
 
-    # 4) Guardar cache
+    # 3) Guardar en caché
     try:
         requests.post(
             f"{CACHE_URL}/cache",
@@ -80,9 +81,9 @@ def get_flights():
     except Exception as e:
         app.logger.warning(f"Failed to save cache: {e}")
 
-    # 5) Ordenar y responder
+    # 4) Ordenar por precio y responder
     flights.sort(key=lambda x: x.get('price', float('inf')))
-    return jsonify(flights)
+    return jsonify(flights), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3001)
